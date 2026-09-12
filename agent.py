@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Offline Coding Agent tailored for 'kirmya_project'
+Offline Coding Agent for arbitrary local software projects
 Powered by Ollama and local LLMs (e.g., qwen2.5-coder:7b / qwen2.5-coder:14b).
 
 Features:
@@ -146,7 +146,7 @@ class WorkspaceGuard:
 # ============================================================================
 
 class ProjectDetector:
-    """Inspects kirmya_project to identify language, frameworks, test runners, and scripts."""
+    """Inspect a workspace and infer its stack and safe verification commands."""
 
     def __init__(self, guard: WorkspaceGuard):
         self.guard = guard
@@ -159,37 +159,70 @@ class ProjectDetector:
             "is_git": (self.root / ".git").is_dir(),
             "type": "Unknown",
             "frameworks": [],
-            "package_manager": "npm",
+            "package_manager": "None detected",
             "scripts": {},
             "key_files": [],
-            "typecheck_cmd": "npx tsc --noEmit",
-            "test_cmd": "npm test",
-            "lint_cmd": "npm run lint",
+            "typecheck_cmd": "Not detected",
+            "test_cmd": "Not detected",
+            "lint_cmd": "Not detected",
         }
 
         # Check key configuration files
         configs = [
             "package.json", "tsconfig.json", "requirements.txt",
             "pyproject.toml", "Cargo.toml", "pom.xml", "vite.config.ts",
-            "next.config.js", "next.config.mjs", "webpack.config.js"
+            "next.config.js", "next.config.mjs", "webpack.config.js", "setup.py",
+            "setup.cfg", "Pipfile", "poetry.lock", "uv.lock", "Cargo.lock",
+            "go.mod", "build.gradle", "build.gradle.kts", "Gemfile", "Makefile"
         ]
         for cfg in configs:
             if (self.root / cfg).is_file():
                 info["key_files"].append(cfg)
 
         # Detect package managers
-        if (self.root / "pnpm-lock.yaml").is_file():
+        if (self.root / "bun.lockb").is_file() or (self.root / "bun.lock").is_file():
+            info["package_manager"] = "bun"
+        elif (self.root / "pnpm-lock.yaml").is_file():
             info["package_manager"] = "pnpm"
         elif (self.root / "yarn.lock").is_file():
             info["package_manager"] = "yarn"
         elif (self.root / "package-lock.json").is_file():
             info["package_manager"] = "npm"
 
+        has_python = any((self.root / f).is_file() for f in ("pyproject.toml", "requirements.txt", "setup.py", "Pipfile"))
+        has_rust = (self.root / "Cargo.toml").is_file()
+        has_go = (self.root / "go.mod").is_file()
+        has_java = any((self.root / f).is_file() for f in ("pom.xml", "build.gradle", "build.gradle.kts"))
+        has_ruby = (self.root / "Gemfile").is_file()
+
+        if has_python:
+            info["package_manager"] = "uv" if (self.root / "uv.lock").is_file() else ("poetry" if (self.root / "poetry.lock").is_file() else "pip")
+            info["type"] = "Python"
+            if (self.root / "manage.py").is_file():
+                info["frameworks"].append("Django")
+            info["typecheck_cmd"] = "pyright" if (self.root / "pyrightconfig.json").is_file() else ("mypy ." if (self.root / "mypy.ini").is_file() else "python -m compileall -q .")
+            info["test_cmd"] = "pytest" if (self.root / "pytest.ini").is_file() or (self.root / "pyproject.toml").is_file() or (self.root / "tests").is_dir() else "Not detected"
+            info["lint_cmd"] = "ruff check ." if (self.root / "ruff.toml").is_file() or (self.root / ".ruff.toml").is_file() else "Not detected"
+        elif has_rust:
+            info.update({"type": "Rust", "package_manager": "cargo", "typecheck_cmd": "cargo check", "test_cmd": "cargo test", "lint_cmd": "cargo clippy --all-targets --all-features -- -D warnings"})
+        elif has_go:
+            info.update({"type": "Go", "package_manager": "go", "typecheck_cmd": "go vet ./...", "test_cmd": "go test ./...", "lint_cmd": "gofmt -d ."})
+        elif has_java:
+            info["type"] = "Java/Kotlin"
+            info["package_manager"] = "maven" if (self.root / "pom.xml").is_file() else "gradle"
+            build = "mvn" if info["package_manager"] == "maven" else "gradle"
+            info.update({"typecheck_cmd": f"{build} -q -DskipTests compile" if build == "mvn" else f"{build} compileJava", "test_cmd": f"{build} test"})
+        elif has_ruby:
+            info.update({"type": "Ruby", "package_manager": "bundler", "test_cmd": "bundle exec rake test", "lint_cmd": "bundle exec rubocop"})
+
         pm = info["package_manager"]
 
         # Inspect package.json
         pkg_json_path = self.root / "package.json"
         if pkg_json_path.is_file():
+            if info["package_manager"] == "None detected":
+                info["package_manager"] = "npm"
+            pm = info["package_manager"]
             try:
                 with open(pkg_json_path, "r", encoding="utf-8") as f:
                     pkg_data = json.load(f)
@@ -532,12 +565,16 @@ class ToolSuite:
     def run_typecheck(self) -> str:
         """Runs the repository typecheck command (e.g. npm run typecheck or npx tsc --noEmit)."""
         cmd = self.project_info.get("typecheck_cmd", "npx tsc --noEmit")
+        if cmd == "Not detected":
+            return "Skipped: no typecheck command detected for this project."
         print_info(f"Executing Typecheck: {cmd}")
         return self.run_terminal(cmd)
 
     def run_unit_tests(self, test_file: Optional[str] = None) -> str:
         """Runs unit tests, optionally targeting an affected test file."""
         base_cmd = self.project_info.get("test_cmd", "npm test")
+        if base_cmd == "Not detected":
+            return "Skipped: no test command detected for this project."
         if test_file:
             safe_target = self.guard.get_rel_path(test_file)
             cmd = f"{base_cmd} -- {safe_target}"
@@ -549,6 +586,8 @@ class ToolSuite:
     def run_linter(self) -> str:
         """Runs the repository linter command (e.g. npm run lint)."""
         cmd = self.project_info.get("lint_cmd", "npm run lint")
+        if cmd == "Not detected":
+            return "Skipped: no linter command detected for this project."
         print_info(f"Executing Linter: {cmd}")
         return self.run_terminal(cmd)
 
@@ -939,7 +978,7 @@ class OfflineCodingAgent:
 
     def _build_system_prompt(self) -> str:
         p = self.project_info
-        frameworks_str = ", ".join(p["frameworks"]) or "TypeScript/React"
+        frameworks_str = ", ".join(p["frameworks"]) or "None detected"
 
         return f"""You are an expert offline coding assistant working on '{p['name']}'.
 Workspace Root: {p['path']}
@@ -953,11 +992,9 @@ Repository Conventions and Available Verification Commands:
 
 STRICT EDIT-AND-VERIFY WORKFLOW:
 1. Make targeted file changes using `read_file` and `write_file`.
-2. Immediately call `run_typecheck` (or `run_terminal('{p['typecheck_cmd']}')) to verify types. If type errors occur, resolve them first.
-3. Call `run_unit_tests` on affected files (or `run_terminal('{p['test_cmd']}')) to verify behavior.
-4. Call `run_linter` (or `run_terminal('{p['lint_cmd']}')) before concluding to ensure repository style standards.
-5. Do not conclude the task until BOTH typecheck and unit tests pass cleanly.
-6. Call `finish_task` with a clear summary when complete. This automatically triggers a `git status` and `git diff` audit.
+2. Run detected verification commands when they are not `Not detected`; do not invent commands for an unfamiliar stack.
+3. Run tests and lint when detected, then fix failures before concluding.
+4. Call `finish_task` with a clear summary when complete. This automatically triggers a `git status` and `git diff` audit.
 
 SECURITY CONSTRAINT:
 You are strictly confined to '{p['path']}'. Never attempt to read or write paths outside this directory.
@@ -1159,7 +1196,7 @@ Always inspect code before editing. Keep diffs focused and minimal.
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Self-contained Offline Coding Agent for kirmya_project using Ollama."
+        description="Self-contained offline coding agent for any local software project using Ollama."
     )
     # Positional workspace argument (nargs="*") so any unflagged path is captured
     parser.add_argument(
@@ -1212,16 +1249,11 @@ def main():
     elif args.workspace:
         raw_workspace = args.workspace[0]
     else:
-        raw_workspace = os.environ.get("KIRMYA_PROJECT_PATH", os.environ.get("WORKSPACE_DIR"))
+        raw_workspace = os.environ.get("WORKSPACE_DIR", os.environ.get("KIRMYA_PROJECT_PATH"))
 
-    # Fallback to demo or current directory if not specified
+    # With no explicit target, operate on the current directory.
     if not raw_workspace:
-        if os.path.isdir("./kirmya_project"):
-            raw_workspace = "./kirmya_project"
-        elif os.path.isdir("./kirmya_project_demo"):
-            raw_workspace = "./kirmya_project_demo"
-        else:
-            raw_workspace = "."
+        raw_workspace = "."
 
     # Requirement 2: Resolve workspace to absolute path and validate existence
     workspace_abs = os.path.abspath(raw_workspace)
@@ -1232,7 +1264,7 @@ def main():
         print_error(f"Target workspace path is not a directory: {workspace_abs}")
         sys.exit(1)
 
-    print_banner("OLLAMA OFFLINE CODING AGENT FOR KIRMYA_PROJECT")
+    print_banner(f"OLLAMA OFFLINE CODING AGENT — {Path(workspace_abs).name}")
 
     # Initialize agent (Requirement 3: workspace dynamically propagated into all tools and guards)
     try:
@@ -1294,7 +1326,7 @@ def main():
     print_info("Entering interactive mode. Type your task, or 'exit' / 'quit' to end.\n")
     while True:
         try:
-            prompt = input("\nkirmya_agent > ").strip()
+            prompt = input("\ncoding_agent > ").strip()
             if not prompt:
                 continue
             if prompt.lower() in ("exit", "quit", "q"):

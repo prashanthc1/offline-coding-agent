@@ -1,14 +1,14 @@
-# Offline Coding Agent for `kirmya_project`
+# Offline Coding Agent for Any Local Project
 
-A high-performance, 100% offline, self-contained AI coding agent built to work on an existing repository named **`kirmya_project`** (TypeScript/React). Powered by local LLMs through [Ollama](https://ollama.com/) (defaulting to `qwen2.5-coder:7b` or `qwen2.5-coder:14b`).
+A high-performance, 100% offline, self-contained AI coding agent that can work on any existing local repository. It detects common JavaScript/TypeScript, Python, Rust, Go, Java/Kotlin, and Ruby project layouts, then selects verification commands from project metadata. Powered by local LLMs through [Ollama](https://ollama.com/).
 
 ---
 
 ## Key Features
 
 - **100% Air-Gapped & Offline**: No cloud APIs, no external telemetry, zero data egress.
-- **Strict Path Traversal Guard**: Enforces strict workspace boundaries. Any attempt to read or write files outside `kirmya_project` (including directory traversal `../` and symlink escapes) is immediately blocked with a `SecurityViolationError`.
-- **Pre-Flight Project Awareness**: Inspects `package.json`, `tsconfig.json`, build scripts, and test runners on startup. Automatically configures the optimal typecheck (`tsc --noEmit`), test (`vitest` / `jest`), and linter commands.
+- **Strict Path Traversal Guard**: Enforces strict boundaries around whichever workspace you provide. Any attempt to read or write files outside it (including directory traversal `../` and symlink escapes) is immediately blocked with a `SecurityViolationError`.
+- **Pre-Flight Project Awareness**: Inspects project manifests, lockfiles, build scripts, and test runners on startup. Automatically configures suitable verification commands for the detected stack.
 - **Strict Edit-and-Verify Workflow**:
   1. Inspect code without context explosion using windowed `read_file`.
   2. Make targeted modifications with `write_file`.
@@ -60,11 +60,11 @@ ollama pull qwen2.5-coder:7b
 ### 2. Running on Windows
 Double-click `run_agent.bat` or run from PowerShell / Command Prompt:
 ```cmd
-run_agent.bat "C:\path\to\kirmya_project"
+run_agent.bat "C:\path\to\your-project"
 ```
 Or set the environment variable:
 ```cmd
-set KIRMYA_PROJECT_PATH=C:\path\to\kirmya_project
+set WORKSPACE_DIR=C:\path\to\your-project
 run_agent.bat
 ```
 
@@ -72,7 +72,7 @@ run_agent.bat
 Make the script executable and run:
 ```bash
 chmod +x run_agent.sh
-./run_agent.sh /path/to/kirmya_project
+./run_agent.sh /path/to/your-project
 ```
 
 ### 4. Running Directly with Python
@@ -85,10 +85,10 @@ source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 
 # Run interactive session
-python agent.py --workspace /path/to/kirmya_project --model qwen2.5-coder:7b
+python agent.py --workspace /path/to/your-project --model qwen2.5-coder:7b
 
 # Run a single task non-interactively
-python agent.py --workspace /path/to/kirmya_project --task "Fix the button toggle handler in src/App.tsx and run tests"
+python agent.py --workspace /path/to/your-project --task "Fix the button toggle handler and run tests"
 ```
 
 ---
@@ -104,13 +104,13 @@ docker build -t kirmya-coding-agent .
 # 2. Run with Host Ollama connection:
 docker run -it --rm \
   --add-host=host.docker.internal:host-gateway \
-  -v "/path/to/kirmya_project:/workspace" \
+  -v "/path/to/your-project:/workspace" \
   kirmya-coding-agent
 
 # 3. Completely Air-Gapped execution (network disabled):
 docker run -it --rm \
   --network none \
-  -v "/path/to/kirmya_project:/workspace" \
+  -v "/path/to/your-project:/workspace" \
   kirmya-coding-agent --help
 ```
 

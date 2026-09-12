@@ -193,6 +193,27 @@ class TestProjectDetector(unittest.TestCase):
         self.assertEqual(info["test_cmd"], "npm test")
         self.assertEqual(info["lint_cmd"], "npm run lint")
 
+    def test_detect_python_project(self):
+        (Path(self.temp_dir) / "pyproject.toml").write_text("[tool.pytest]\n", encoding="utf-8")
+        (Path(self.temp_dir) / "ruff.toml").write_text("[lint]\n", encoding="utf-8")
+        (Path(self.temp_dir) / "tests").mkdir()
+
+        info = self.detector.detect()
+
+        self.assertEqual(info["type"], "Python")
+        self.assertEqual(info["typecheck_cmd"], "python -m compileall -q .")
+        self.assertEqual(info["test_cmd"], "pytest")
+        self.assertEqual(info["lint_cmd"], "ruff check .")
+
+    def test_detect_rust_project(self):
+        (Path(self.temp_dir) / "Cargo.toml").write_text("[package]\nname='demo'\n", encoding="utf-8")
+
+        info = self.detector.detect()
+
+        self.assertEqual(info["type"], "Rust")
+        self.assertEqual(info["package_manager"], "cargo")
+        self.assertEqual(info["typecheck_cmd"], "cargo check")
+
 
 if __name__ == "__main__":
     unittest.main()

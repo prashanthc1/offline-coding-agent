@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# Offline Coding Agent Runner for kirmya_project (Linux / macOS)
+# Offline Coding Agent Runner for any local project (Linux / macOS)
 # ==============================================================================
 
 set -eo pipefail
 
 OLLAMA_HOST="${OLLAMA_HOST:-http://localhost:11434}"
 DEFAULT_MODEL="${OLLAMA_MODEL:-qwen2.5-coder:7b}"
-DEFAULT_WORKSPACE="${KIRMYA_PROJECT_PATH:-./kirmya_project}"
+DEFAULT_WORKSPACE="${WORKSPACE_DIR:-${KIRMYA_PROJECT_PATH:-.}}"
 
 # Workspace can be passed as the first positional argument
 WORKSPACE="${1:-$DEFAULT_WORKSPACE}"
@@ -16,7 +16,7 @@ shift || true
 MODEL="$DEFAULT_MODEL"
 
 echo "=========================================================="
-echo "  Starting Offline Coding Agent for kirmya_project"
+echo "  Starting Offline Coding Agent"
 echo "=========================================================="
 echo "Workspace: $WORKSPACE"
 echo "Model:     $MODEL"

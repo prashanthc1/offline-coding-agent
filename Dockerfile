@@ -1,5 +1,5 @@
 # ==============================================================================
-# Sandboxed Offline Coding Agent for kirmya_project
+# Sandboxed Offline Coding Agent for any local project
 # ==============================================================================
 FROM python:3.12-slim-bookworm
 
@@ -34,7 +34,6 @@ RUN mkdir -p /workspace
 
 # Set default environment variables
 ENV WORKSPACE_DIR=/workspace
-ENV KIRMYA_PROJECT_PATH=/workspace
 ENV OLLAMA_BASE_URL=http://host.docker.internal:11434/v1
 ENV OLLAMA_MODEL=qwen2.5-coder:7b
 
@@ -50,12 +49,12 @@ ENTRYPOINT ["python", "/app/agent.py", "--workspace", "/workspace"]
 # 2. Run with Host Ollama Access (connecting to host machine Ollama):
 #    docker run -it --rm \
 #      --add-host=host.docker.internal:host-gateway \
-#      -v "/path/to/kirmya_project:/workspace" \
+#      -v "/path/to/your-project:/workspace" \
 #      kirmya-coding-agent
 #
 # 3. Fully Offline / Air-gapped Execution (Strict --network none):
 #    docker run -it --rm \
 #      --network none \
-#      -v "/path/to/kirmya_project:/workspace" \
+#      -v "/path/to/your-project:/workspace" \
 #      kirmya-coding-agent --help
 # ==============================================================================

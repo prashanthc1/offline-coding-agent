@@ -2,7 +2,7 @@
 setlocal enabledelayedexpansion
 
 REM ==============================================================================
-REM Offline Coding Agent Runner for kirmya_project (Windows)
+REM Offline Coding Agent Runner for any local project (Windows)
 REM ==============================================================================
 
 set "OLLAMA_HOST=%OLLAMA_HOST%"
@@ -13,25 +13,21 @@ if "%MODEL%"=="" set "MODEL=qwen2.5-coder:7b"
 
 set "WORKSPACE=%~1"
 if "%WORKSPACE%"=="" (
-    if defined KIRMYA_PROJECT_PATH (
-        set "WORKSPACE=%KIRMYA_PROJECT_PATH%"
-    ) else if exist ".\kirmya_project" (
-        set "WORKSPACE=.\kirmya_project"
-    ) else if exist ".\kirmya_project_demo" (
-        set "WORKSPACE=.\kirmya_project_demo"
+    if defined WORKSPACE_DIR (
+        set "WORKSPACE=%WORKSPACE_DIR%"
     ) else (
-        set "WORKSPACE=.\kirmya_project"
+        set "WORKSPACE=."
     )
 )
 
-REM If specified workspace directory doesn't exist, automatically create it
+REM The target must already exist; never create a project by accident.
 if not exist "%WORKSPACE%" (
-    echo [Notice] Directory "%WORKSPACE%" does not exist. Creating workspace folder...
-    mkdir "%WORKSPACE%"
+    echo ERROR: Workspace directory "%WORKSPACE%" does not exist.
+    exit /b 1
 )
 
 echo ==========================================================
-echo   Starting Offline Coding Agent for kirmya_project
+echo   Starting Offline Coding Agent
 echo ==========================================================
 echo Workspace: %WORKSPACE%
 echo Model:     %MODEL%
